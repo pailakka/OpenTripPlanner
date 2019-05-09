@@ -822,7 +822,7 @@ public class GraphIndex {
                         if (!sd.serviceRunning(triptimes.serviceCode))
                             continue;
                         int stopDepartureTime = triptimes.getDepartureTime(stopIndex);
-                        if (!(omitCanceled && triptimes.isCanceledDeparture(stopIndex)) && stopDepartureTime >= starttimeSecondsSinceMidnight && stopDepartureTime < starttimeSecondsSinceMidnight + timeRange) {
+                        if (!(omitCanceled && stopDepartureTime != -1) && stopDepartureTime >= starttimeSecondsSinceMidnight && stopDepartureTime < starttimeSecondsSinceMidnight + timeRange) {
                             ret.insertWithOverflow(new TripTimeShort(triptimes, stopIndex, currStop, sd));
                             }
                         }

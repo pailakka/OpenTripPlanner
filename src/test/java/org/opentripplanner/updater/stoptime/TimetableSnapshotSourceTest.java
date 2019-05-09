@@ -156,8 +156,8 @@ public class TimetableSnapshotSourceTest {
 
         final TripTimes tripTimes = forToday.getTripTimes(tripIndex);
         for (int i = 0; i < tripTimes.getNumStops(); i++) {
-            assertTrue(tripTimes.isCanceledDeparture(i));
-            assertTrue(tripTimes.isCanceledArrival(i));
+            assertEquals(TripTimes.UNAVAILABLE, tripTimes.getDepartureTime(i));
+            assertEquals(TripTimes.UNAVAILABLE, tripTimes.getArrivalTime(i));
         }
         assertEquals(RealTimeState.CANCELED, tripTimes.getRealTimeState());
     }

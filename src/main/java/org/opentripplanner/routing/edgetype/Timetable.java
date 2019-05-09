@@ -161,7 +161,7 @@ public class Timetable implements Serializable {
             if (adjustedTime == -1) continue;
             if (boarding) {
                 int depTime = tt.getDepartureTime(stopIndex);
-                if (tt.isCanceledDeparture(stopIndex) && omitCanceled) continue; // negative values were previously used for canceled trips/passed stops/skipped stops, but
+                if (depTime < 0 && omitCanceled) continue; // negative values were previously used for canceled trips/passed stops/skipped stops, but
                                            // now its not sure if this check should be still in place because there is a boolean field
                                            // for canceled trips
                 if (depTime >= adjustedTime && depTime < bestTime) {
@@ -170,7 +170,7 @@ public class Timetable implements Serializable {
                 }
             } else {
                 int arvTime = tt.getArrivalTime(stopIndex);
-                if (tt.isCanceledArrival(stopIndex) && omitCanceled) continue;
+                if (arvTime < 0 && omitCanceled) continue;
                 if (arvTime <= adjustedTime && arvTime > bestTime) {
                     bestTrip = tt;
                     bestTime = arvTime;
@@ -416,7 +416,6 @@ public class Timetable implements Serializable {
 
             int numStops = newTimes.getNumStops();
             Integer delay = null;
-            boolean hasMatched = false;
             for (int i = 0; i < numStops; i++) {
                 boolean match = false;
                 if (update != null) {
@@ -428,7 +427,6 @@ public class Timetable implements Serializable {
                 }
 
                 if (match) {
-                    hasMatched = true;
                     StopTimeUpdate.ScheduleRelationship scheduleRelationship =
                             update.hasScheduleRelationship() ? update.getScheduleRelationship()
                             : StopTimeUpdate.ScheduleRelationship.SCHEDULED;
@@ -464,13 +462,9 @@ public class Timetable implements Serializable {
                             }
                         } else {
                             if (delay == null) {
-                                newTimes.cancelArrivalTime(i);
-                                newTimes.updateArrivalDelay(i, TripTimes.UNAVAILABLE);
+                                newTimes.updateArrivalTime(i, TripTimes.UNAVAILABLE);
                             } else {
                                 newTimes.updateArrivalDelay(i, delay);
-                                if (newTimes.isCanceledArrival(i)) {
-                                    newTimes.unCancelArrivalTime(i);
-                                }
                             }
                         }
 
@@ -494,13 +488,9 @@ public class Timetable implements Serializable {
                             }
                         } else {
                             if (delay == null) {
-                                newTimes.cancelDepartureTime(i);
                                 newTimes.updateDepartureDelay(i, TripTimes.UNAVAILABLE);
                             } else {
                                 newTimes.updateDepartureDelay(i, delay);
-                                if (newTimes.isCanceledDeparture(i)) {
-                                    newTimes.unCancelDepartureTime(i);
-                                }
                             }
                         }
                     }
@@ -511,21 +501,12 @@ public class Timetable implements Serializable {
                         update = null;
                     }
                 } else {
-                    if (hasMatched) {
-                        if (delay == null) {
-                            newTimes.cancelArrivalTime(i);
-                            newTimes.cancelDepartureTime(i);
-                        } else {
-                            newTimes.updateArrivalDelay(i, delay);
-                            if (newTimes.isCanceledArrival(i)) {
-                                newTimes.unCancelArrivalTime(i);
-                            }
-
-                            newTimes.updateDepartureDelay(i, delay);
-                            if (newTimes.isCanceledDeparture(i)) {
-                                newTimes.unCancelDepartureTime(i);
-                            }
-                        }
+                    if (delay == null) {
+                        newTimes.updateArrivalTime(i, TripTimes.UNAVAILABLE);
+                        newTimes.updateDepartureTime(i, TripTimes.UNAVAILABLE);
+                    } else {
+                        newTimes.updateArrivalDelay(i, delay);
+                        newTimes.updateDepartureDelay(i, delay);
                     }
                 }
             }
