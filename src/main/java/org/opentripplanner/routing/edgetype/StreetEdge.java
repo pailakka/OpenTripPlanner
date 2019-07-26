@@ -423,8 +423,6 @@ public class StreetEdge extends Edge implements Cloneable {
 
         int roundedTime = (int) Math.ceil(time);
 
-        int roundedTime = (int) Math.ceil(time);
-
         /* Compute turn cost. */
         StreetEdge backPSE;
         if (backEdge != null && backEdge instanceof StreetEdge) {

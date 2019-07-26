@@ -53,12 +53,9 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriInfo;
+import java.io.IOException;
 import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
@@ -605,7 +602,7 @@ public class IndexAPI {
                 try {
                     variables = deserializer.readValue((String) query.get("variables"), Map.class);
                 } catch (IOException e) {
-                    LOG.error("Variables must be a valid json object: '{}'", query.get("variables"));
+//                    LOG.error("Variables must be a valid json object: '{}'", query.get("variables"));
                     return Response.status(Status.BAD_REQUEST).entity(MSG_400).build();
                 }
             } else {

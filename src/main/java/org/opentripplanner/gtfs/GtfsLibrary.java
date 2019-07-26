@@ -91,35 +91,4 @@ public class GtfsLibrary {
 
         return getTraverseMode(routeType);
     }
-
-    private static class GtfsContextImpl implements GtfsContext {
-
-        private GtfsFeedId feedId;
-
-        private OtpTransitService transitService;
-
-        private CalendarService calendar;
-
-        public GtfsContextImpl(GtfsFeedId feedId, OtpTransitService transitService,
-                CalendarService calendar) {
-            this.feedId = feedId;
-            this.transitService = transitService;
-            this.calendar = calendar;
-        }
-
-        @Override
-        public GtfsFeedId getFeedId() {
-            return feedId;
-        }
-
-        @Override
-        public OtpTransitService getOtpTransitService() {
-            return transitService;
-        }
-
-        @Override
-        public CalendarService getCalendarService() {
-            return calendar;
-        }
-    }
 }

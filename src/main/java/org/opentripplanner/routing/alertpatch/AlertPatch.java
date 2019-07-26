@@ -124,7 +124,7 @@ public class AlertPatch implements Serializable {
                    }
                    return true;
                })
-               .peek(tripPattern -> addAlertPatchToEdges(graph, stop, tripPattern))
+//               .peek(tripPattern -> addAlertPatchToEdges(graph, stop, tripPattern))
                .collect(Collectors.toList());
             } else {
                 // Find patterns for the feed.

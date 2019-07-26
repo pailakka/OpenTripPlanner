@@ -83,10 +83,6 @@ public class LuceneIndex {
             for (Stop stop : graphIndex.stopForId.values()) {
                 addStop(writer, stop);
             }
-            graphIndex.clusterStopsAsNeeded();
-            for (StopCluster stopCluster : graphIndex.stopClusterForId.values()) {
-                addCluster(writer, stopCluster);
-            }
             for (StreetVertex sv : Iterables.filter(graphIndex.vertexForId.values(), StreetVertex.class)) {
                 addCorner(writer, sv);
             }

@@ -7,6 +7,8 @@ import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Multimap;
+import gnu.trove.list.TIntList;
+import gnu.trove.list.array.TIntArrayList;
 import org.apache.commons.math3.util.FastMath;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.CoordinateSequence;
@@ -19,24 +21,11 @@ import org.opentripplanner.common.geometry.GeometryUtils;
 import org.opentripplanner.common.geometry.PackedCoordinateSequence;
 import org.opentripplanner.common.geometry.SphericalDistanceLibrary;
 import org.opentripplanner.common.model.P2;
-import org.opentripplanner.graph_builder.annotation.BogusShapeDistanceTraveled;
-import org.opentripplanner.graph_builder.annotation.BogusShapeGeometry;
-import org.opentripplanner.graph_builder.annotation.BogusShapeGeometryCaught;
-import org.opentripplanner.graph_builder.annotation.NonStationParentStation;
+import org.opentripplanner.graph_builder.annotation.*;
 import org.opentripplanner.graph_builder.module.GtfsFeedId;
 import org.opentripplanner.gtfs.GtfsContext;
 import org.opentripplanner.gtfs.GtfsLibrary;
-import org.opentripplanner.model.Agency;
-import org.opentripplanner.model.FeedInfo;
-import org.opentripplanner.model.FeedScopedId;
-import org.opentripplanner.model.OtpTransitService;
-import org.opentripplanner.model.Pathway;
-import org.opentripplanner.model.Route;
-import org.opentripplanner.model.ShapePoint;
-import org.opentripplanner.model.Stop;
-import org.opentripplanner.model.StopTime;
-import org.opentripplanner.model.Transfer;
-import org.opentripplanner.model.Trip;
+import org.opentripplanner.model.*;
 import org.opentripplanner.routing.core.StopTransfer;
 import org.opentripplanner.routing.core.TransferTable;
 import org.opentripplanner.routing.core.TraverseMode;
@@ -73,143 +62,6 @@ import java.util.Map;
 // or do all the steps within one loop over trips. It would be clearer if there were multiple loops over the trips.
 
 /**
- * This compound key object is used when grouping interlining trips together by (serviceId, blockId).
- */
-class BlockIdAndServiceId {
-    public String blockId;
-    public FeedScopedId serviceId;
-
-    BlockIdAndServiceId(Trip trip) {
-        this.blockId = trip.getBlockId();
-        this.serviceId = trip.getServiceId();
-    }
-
-    public boolean equals(Object o) {
-        if (o instanceof BlockIdAndServiceId) {
-            BlockIdAndServiceId other = ((BlockIdAndServiceId) o);
-            return other.blockId.equals(blockId) && other.serviceId.equals(serviceId);
-        }
-        return false;
-    }
-
-    @Override
-    public int hashCode() {
-        return blockId.hashCode() * 31 + serviceId.hashCode();
-    }
-}
-
-/* TODO Move this stuff into the geometry library */
-class IndexedLineSegment {
-    private static final double RADIUS = SphericalDistanceLibrary.RADIUS_OF_EARTH_IN_M;
-    int index;
-    Coordinate start;
-    Coordinate end;
-    private double lineLength;
-
-    public IndexedLineSegment(int index, Coordinate start, Coordinate end) {
-        this.index = index;
-        this.start = start;
-        this.end = end;
-        this.lineLength = SphericalDistanceLibrary.fastDistance(start, end);
-    }
-
-    // in radians
-    static double bearing(Coordinate c1, Coordinate c2) {
-        double deltaLon = (c2.x - c1.x) * FastMath.PI / 180;
-        double lat1Radians = c1.y * FastMath.PI / 180;
-        double lat2Radians = c2.y * FastMath.PI / 180;
-        double y = FastMath.sin(deltaLon) * FastMath.cos(lat2Radians);
-        double x = FastMath.cos(lat1Radians)*FastMath.sin(lat2Radians) -
-                FastMath.sin(lat1Radians)*FastMath.cos(lat2Radians)*FastMath.cos(deltaLon);
-        return FastMath.atan2(y, x);
-    }
-
-    double crossTrackError(Coordinate coord) {
-        double distanceFromStart = SphericalDistanceLibrary.fastDistance(start, coord);
-        double bearingToCoord = bearing(start, coord);
-        double bearingToEnd = bearing(start, end);
-        return FastMath.asin(FastMath.sin(distanceFromStart / RADIUS)
-            * FastMath.sin(bearingToCoord - bearingToEnd))
-            * RADIUS;
-    }
-
-    double distance(Coordinate coord) {
-        double cte = crossTrackError(coord);
-        double atd = alongTrackDistance(coord, cte);
-        double inverseAtd = inverseAlongTrackDistance(coord, -cte);
-        double distanceToStart = SphericalDistanceLibrary.fastDistance(coord, start);
-        double distanceToEnd = SphericalDistanceLibrary.fastDistance(coord, end);
-
-        if (distanceToStart < distanceToEnd) {
-            //we might be behind the line start
-            if (inverseAtd > lineLength) {
-                //we are behind line start
-                return distanceToStart;
-            } else {
-                //we are within line
-                return Math.abs(cte);
-            }
-        } else {
-            //we might be after line end
-            if (atd > lineLength) {
-                //we are behind line end, so we that's the nearest point
-                return distanceToEnd;
-            } else {
-                //we are within line
-                return Math.abs(cte);
-            }
-        }
-    }
-
-    private double inverseAlongTrackDistance(Coordinate coord, double inverseCrossTrackError) {
-        double distanceFromEnd = SphericalDistanceLibrary.fastDistance(end, coord);
-        double alongTrackDistance = FastMath.acos(FastMath.cos(distanceFromEnd / RADIUS)
-            / FastMath.cos(inverseCrossTrackError / RADIUS))
-            * RADIUS;
-        return alongTrackDistance;
-    }
-
-    public double fraction(Coordinate coord) {
-        double cte = crossTrackError(coord);
-        double distanceToStart = SphericalDistanceLibrary.fastDistance(coord, start);
-        double distanceToEnd = SphericalDistanceLibrary.fastDistance(coord, end);
-
-        if (cte < distanceToStart && cte < distanceToEnd) {
-            double atd = alongTrackDistance(coord, cte);
-            return atd / lineLength;
-        } else {
-            if (distanceToStart < distanceToEnd) {
-                return 0;
-            } else {
-                return 1;
-            }
-        }
-    }
-
-    private double alongTrackDistance(Coordinate coord, double crossTrackError) {
-        double distanceFromStart = SphericalDistanceLibrary.fastDistance(start, coord);
-        double alongTrackDistance = FastMath.acos(FastMath.cos(distanceFromStart / RADIUS)
-            / FastMath.cos(crossTrackError / RADIUS))
-            * RADIUS;
-        return alongTrackDistance;
-    }
-}
-
-class IndexedLineSegmentComparator implements Comparator<IndexedLineSegment> {
-
-    private Coordinate coord;
-
-    public IndexedLineSegmentComparator(Coordinate coord) {
-        this.coord = coord;
-    }
-
-    @Override
-    public int compare(IndexedLineSegment a, IndexedLineSegment b) {
-        return (int) FastMath.signum(a.distance(coord) - b.distance(coord));
-    }
-}
-
-/**
  * Generates a set of edges from GTFS.
  */
 public class PatternHopFactory {
@@ -221,8 +73,6 @@ public class PatternHopFactory {
     private GtfsFeedId feedId;
 
     private OtpTransitService transitService;
-
-    private CalendarService calendarService;
 
     private Map<ShapeSegmentKey, LineString> geometriesByShapeSegmentKey = new HashMap<ShapeSegmentKey, LineString>();
 
@@ -287,15 +137,6 @@ public class PatternHopFactory {
 
         LOG.debug("building hops from trips");
 
-        /* First, record which trips are used by one or more frequency entries.
-         * These trips will be ignored for the purposes of non-frequency routing, and
-         * all the frequency entries referencing the same trip can be added at once to the same
-         * Timetable/TripPattern.
-         */
-        ListMultimap<Trip, Frequency> frequenciesForTrip = ArrayListMultimap.create();
-        for(Frequency freq : transitService.getAllFrequencies()) {
-            frequenciesForTrip.put(freq.getTrip(), freq);
-        }
 
         /* Then loop over all trips, handling each one as a frequency-based or scheduled trip. */
         int freqCount = 0;

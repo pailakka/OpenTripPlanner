@@ -136,6 +136,7 @@ public class GraphIndex {
     public static final int MAX_WALK_METERS = 3500;
 
     // TODO: consistently key on model object or id string
+    public final Map<String, Vertex> vertexForId = Maps.newHashMap();
     public final Map<String, Map<String, Agency>> agenciesForFeedId = Maps.newHashMap();
     public final Map<String, FeedInfo> feedInfoForId = Maps.newHashMap();
     public final Map<FeedScopedId, Stop> stopForId = Maps.newHashMap();
@@ -143,6 +144,7 @@ public class GraphIndex {
     public final Map<FeedScopedId, Trip> tripForId = Maps.newHashMap();
     public final Map<FeedScopedId, Route> routeForId = Maps.newHashMap();
     public final Map<FeedScopedId, String> serviceForId = Maps.newHashMap();
+    public final Map<String, TripPattern> patternForId = Maps.newHashMap();
     public final Map<Stop, TransitStop> stopVertexForStop = Maps.newHashMap();
     public final Map<Trip, TripPattern> patternForTrip = Maps.newHashMap();
     public final Multimap<String, TripPattern> patternsForFeedId = ArrayListMultimap.create();
@@ -150,8 +152,6 @@ public class GraphIndex {
     public final Multimap<Stop, TripPattern> patternsForStop = ArrayListMultimap.create();
     public final Multimap<FeedScopedId, Stop> stopsForParentStation = ArrayListMultimap.create();
     final HashGridSpatialIndex<TransitStop> stopSpatialIndex = new HashGridSpatialIndex<TransitStop>();
-    public final Map<Stop, StopCluster> stopClusterForStop = Maps.newHashMap();
-    public final Map<String, StopCluster> stopClusterForId = Maps.newHashMap();
     public final Map<FeedScopedId, TicketType> ticketTypesForId = Maps.newHashMap();
 
     /* Should eventually be replaced with new serviceId indexes. */
@@ -160,10 +160,6 @@ public class GraphIndex {
 
     /* Full-text search extensions */
     public transient LuceneIndex luceneIndex;
-
-    /* Separate transfers for profile routing */
-    public Multimap<StopCluster, ProfileTransfer> transfersFromStopCluster;
-    private HashGridSpatialIndex<StopCluster> stopClusterSpatialIndex = null;
 
     /* This is a workaround, and should probably eventually be removed. */
     public Graph graph;
@@ -211,6 +207,7 @@ public class GraphIndex {
         /* We will keep a separate set of all vertices in case some have the same label.
          * Maybe we should just guarantee unique labels. */
         for (Vertex vertex : graph.getVertices()) {
+            vertexForId.put(vertex.getLabel(), vertex);
             if (vertex instanceof TransitStop) {
                 TransitStop transitStop = (TransitStop) vertex;
                 Stop stop = transitStop.getStop();
@@ -234,6 +231,7 @@ public class GraphIndex {
         for (TripPattern pattern : graph.tripPatternForId.values()) {
             patternsForFeedId.put(pattern.getFeedId(), pattern);
             patternsForRoute.put(pattern.route, pattern);
+            patternForId.put(pattern.code, pattern);
             for (Trip trip : pattern.getTrips()) {
                 patternForTrip.put(trip, pattern);
                 tripForId.put(trip.getId(), trip);
@@ -302,7 +300,7 @@ public class GraphIndex {
         //rr.parkAndRide = true;
         //rr.modes = new TraverseModeSet(TraverseMode.WALK, TraverseMode.BICYCLE, TraverseMode.CAR);
         rr.from = new GenericLocation(lat, lon);
-        rr.batch = true;
+        rr.oneToMany = true;
         rr.setRoutingContext(graph);
         rr.walkSpeed = 1;
         rr.dominanceFunction = new DominanceFunction.LeastWalk();
