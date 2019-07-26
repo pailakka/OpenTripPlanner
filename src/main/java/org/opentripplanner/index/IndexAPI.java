@@ -7,26 +7,24 @@ import com.google.common.base.Function;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Maps;
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Envelope;
-import org.opentripplanner.model.Agency;
-import org.opentripplanner.model.FeedScopedId;
-import org.opentripplanner.model.FeedInfo;
-import org.opentripplanner.model.Route;
-import org.opentripplanner.model.Stop;
-import org.opentripplanner.model.Trip;
-import org.opentripplanner.model.calendar.ServiceDate;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Envelope;
 import org.opentripplanner.common.geometry.SphericalDistanceLibrary;
 import org.opentripplanner.gtfs.GtfsLibrary;
 import org.opentripplanner.index.model.PatternDetail;
 import org.opentripplanner.index.model.PatternShort;
 import org.opentripplanner.index.model.RouteShort;
-import org.opentripplanner.index.model.StopClusterDetail;
 import org.opentripplanner.index.model.StopShort;
 import org.opentripplanner.index.model.StopTimesInPattern;
 import org.opentripplanner.index.model.TripShort;
 import org.opentripplanner.index.model.TripTimeShort;
-import org.opentripplanner.profile.StopCluster;
+import org.opentripplanner.model.Agency;
+import org.opentripplanner.model.FeedInfo;
+import org.opentripplanner.model.FeedScopedId;
+import org.opentripplanner.model.Route;
+import org.opentripplanner.model.Stop;
+import org.opentripplanner.model.Trip;
+import org.opentripplanner.model.calendar.ServiceDate;
 import org.opentripplanner.routing.edgetype.SimpleTransfer;
 import org.opentripplanner.routing.edgetype.Timetable;
 import org.opentripplanner.routing.edgetype.TripPattern;
@@ -36,10 +34,9 @@ import org.opentripplanner.routing.services.StreetVertexIndexService;
 import org.opentripplanner.routing.vertextype.TransitStop;
 import org.opentripplanner.standalone.OTPServer;
 import org.opentripplanner.standalone.Router;
+import org.opentripplanner.util.HttpToGraphQLMapper;
 import org.opentripplanner.util.PolylineEncoder;
 import org.opentripplanner.util.model.EncodedPolylineBean;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DefaultValue;
@@ -56,25 +53,25 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriInfo;
-import java.io.IOException;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
+import static org.opentripplanner.util.HttpToGraphQLMapper.mapHttpQuerryParamsToQLParams;
+
 // TODO move to org.opentripplanner.api.resource, this is a Jersey resource class
 
 @Path("/routers/{routerId}/index")    // It would be nice to get rid of the final /index.
 @Produces(MediaType.APPLICATION_JSON) // One @Produces annotation for all endpoints.
 public class IndexAPI {
-    private static final Logger LOG = LoggerFactory.getLogger(IndexAPI.class);
+
     private static final double MAX_STOP_SEARCH_RADIUS = 5000;
     private static final String MSG_404 = "FOUR ZERO FOUR";
     private static final String MSG_400 = "FOUR HUNDRED";
@@ -484,14 +481,14 @@ public class IndexAPI {
    @GET
    @Path("/patterns")
    public Response getPatterns () {
-       Collection<TripPattern> patterns = index.patternForId.values();
+       Collection<TripPattern> patterns = index.graph.tripPatternForId.values();
        return Response.status(Status.OK).entity(PatternShort.list(patterns)).build();
    }
 
    @GET
    @Path("/patterns/{patternId}")
    public Response getPattern (@PathParam("patternId") String patternIdString) {
-       TripPattern pattern = index.patternForId.get(patternIdString);
+       TripPattern pattern = index.graph.tripPatternForId.get(patternIdString);
        if (pattern != null) {
            return Response.status(Status.OK).entity(new PatternDetail(pattern)).build();
        } else {
@@ -502,7 +499,7 @@ public class IndexAPI {
    @GET
    @Path("/patterns/{patternId}/trips")
    public Response getTripsForPattern (@PathParam("patternId") String patternIdString) {
-       TripPattern pattern = index.patternForId.get(patternIdString);
+       TripPattern pattern = index.graph.tripPatternForId.get(patternIdString);
        if (pattern != null) {
            List<Trip> trips = pattern.getTrips();
            return Response.status(Status.OK).entity(TripShort.list(trips)).build();
@@ -515,7 +512,7 @@ public class IndexAPI {
    @Path("/patterns/{patternId}/stops")
    public Response getStopsForPattern (@PathParam("patternId") String patternIdString) {
        // Pattern names are graph-unique because we made them that way (did not read them from GTFS).
-       TripPattern pattern = index.patternForId.get(patternIdString);
+       TripPattern pattern = index.graph.tripPatternForId.get(patternIdString);
        if (pattern != null) {
            List<Stop> stops = pattern.getStops();
            return Response.status(Status.OK).entity(StopShort.list(stops)).build();
@@ -528,7 +525,7 @@ public class IndexAPI {
     @Path("/patterns/{patternId}/semanticHash")
     public Response getSemanticHashForPattern (@PathParam("patternId") String patternIdString) {
         // Pattern names are graph-unique because we made them that way (did not read them from GTFS).
-        TripPattern pattern = index.patternForId.get(patternIdString);
+        TripPattern pattern = index.graph.tripPatternForId.get(patternIdString);
         if (pattern != null) {
             String semanticHash = pattern.semanticHashString(null);
             return Response.status(Status.OK).entity(semanticHash).build();
@@ -541,7 +538,7 @@ public class IndexAPI {
     @GET
     @Path("/patterns/{patternId}/geometry")
     public Response getGeometryForPattern (@PathParam("patternId") String patternIdString) {
-        TripPattern pattern = index.patternForId.get(patternIdString);
+        TripPattern pattern = index.graph.tripPatternForId.get(patternIdString);
         if (pattern != null) {
             EncodedPolylineBean geometry = PolylineEncoder.createEncodings(pattern.geometry);
             return Response.status(Status.OK).entity(geometry).build();
@@ -574,62 +571,16 @@ public class IndexAPI {
         return Response.status(Status.OK).entity("NONE").build();
     }
 
-    /**
-     * Return all clusters of stops.
-     * A cluster is not the same thing as a GTFS parent station.
-     * Clusters are an unsupported experimental feature that was added to assist in "profile routing".
-     * As such the stop clustering method probably only works right with one or two GTFS data sets in the world.
-     */
-    @GET
-    @Path("/clusters")
-    public Response getAllStopClusters () {
-        index.clusterStopsAsNeeded();
-        // use 'detail' field common to all API methods in this class
-        List<StopClusterDetail> scl = StopClusterDetail.list(index.stopClusterForId.values(), detail);
-        return Response.status(Status.OK).entity(scl).build();
-    }
-
-    /**
-     * Return a cluster of stops by its ID.
-     * A cluster is not the same thing as a GTFS parent station.
-     * Clusters are an unsupported experimental feature that was added to assist in "profile routing".
-     * As such the stop clustering method probably only works right with one or two GTFS data sets in the world.
-     */
-    @GET
-    @Path("/clusters/{clusterId}")
-    public Response getStopCluster (@PathParam("clusterId") String clusterIdString) {
-        index.clusterStopsAsNeeded();
-        StopCluster cluster = index.stopClusterForId.get(clusterIdString);
-        if (cluster != null) {
-            return Response.status(Status.OK).entity(new StopClusterDetail(cluster, true)).build();
-        } else {
-            return Response.status(Status.NOT_FOUND).entity(MSG_404).build();
-        }
-    }
-
     @POST
     @Path("/graphql")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response getGraphQL (HashMap<String, Object> queryParameters, @Context HttpHeaders httpHeaders, @HeaderParam("OTPTimeout") @DefaultValue("30000") int timeout, @HeaderParam("OTPMaxResolves") @DefaultValue("1000000") long maxResolves) {
 
-        String query = (String) queryParameters.get("query");
-        Object queryVariables = queryParameters.getOrDefault("variables", null);
-        String operationName = (String) queryParameters.getOrDefault("operationName", null);
-
-        Map<String, Object> variables;
-        if (queryVariables instanceof Map) {
-            variables = (Map) queryVariables;
-        } else if (queryVariables instanceof String && !((String) queryVariables).isEmpty()) {
-            try {
-                variables = deserializer.readValue((String) queryVariables, Map.class);
-            } catch (IOException e) {
-                LOG.error("Variables must be a valid json object");
-                return Response.status(Status.BAD_REQUEST).entity(MSG_400).build();
-            }
-        } else {
-            variables = new HashMap<>();
+        HttpToGraphQLMapper.QlRequestParams qlReq = mapHttpQuerryParamsToQLParams(queryParameters, deserializer);
+        if(qlReq.isFailed()) {
+            return qlReq.getFailedResponse();
         }
-        return index.getGraphQLResponse(query, router, variables, operationName, timeout, maxResolves, httpHeaders.getRequestHeaders());
+        return index.getGraphQLResponse(qlReq.query, qlReq.variables, qlReq.operationName);
     }
 
     @POST

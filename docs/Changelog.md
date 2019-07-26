@@ -1,10 +1,15 @@
 # Changelog
 
-## 1.4 (in progress)
+## 2.0 (in progress)
+- Sandbox for experimental features (#2745)
 
+## Ported over from the 1.x
+- Remove Open Traffic prototype code (#2698)
+- Docs: improve configuration documentation
 - Update onebusaway-gtfs to latest version from OBA project (#2636)
 - Remove the coupling to OneBusAway GTFS within OTP's internal model by creating new classes replacing the external classes (#2494)
 - Allow itineraries in response to be sorted by duration (#2593)
+- Fix reverse optimization bug (#2653, #2411)
 
 ## 1.3 (2018-08-03)
 

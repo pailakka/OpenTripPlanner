@@ -1,19 +1,23 @@
 package org.opentripplanner.routing.graph;
 
-import com.conveyal.r5.kryo.TIntArrayListSerializer;
-import com.conveyal.r5.kryo.TIntIntHashMapSerializer;
+import com.conveyal.kryo.TIntArrayListSerializer;
+import com.conveyal.kryo.TIntIntHashMapSerializer;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.ExternalizableSerializer;
 import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.*;
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Envelope;
-import com.vividsolutions.jts.geom.Geometry;
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multiset;
+import com.google.common.collect.Sets;
 import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
-import gnu.trove.impl.hash.TIntHash;
 import gnu.trove.impl.hash.TPrimitiveHash;
 import gnu.trove.list.TDoubleList;
 import gnu.trove.list.array.TIntArrayList;
@@ -21,27 +25,29 @@ import gnu.trove.list.linked.TDoubleLinkedList;
 import gnu.trove.map.hash.TIntIntHashMap;
 import org.apache.commons.math3.stat.descriptive.rank.Median;
 import org.joda.time.DateTime;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Envelope;
+import org.locationtech.jts.geom.Geometry;
 import org.objenesis.strategy.SerializingInstantiatorStrategy;
 import org.opentripplanner.calendar.impl.CalendarServiceImpl;
-import org.opentripplanner.model.Agency;
-import org.opentripplanner.model.FeedScopedId;
-import org.opentripplanner.model.Stop;
-import org.opentripplanner.model.FeedInfo;
-import org.opentripplanner.model.calendar.CalendarServiceData;
-import org.opentripplanner.model.calendar.ServiceDate;
-import org.opentripplanner.model.CalendarService;
-import org.opentripplanner.analyst.core.GeometryIndex;
-import org.opentripplanner.analyst.request.SampleFactory;
 import org.opentripplanner.common.MavenVersion;
 import org.opentripplanner.common.TurnRestriction;
 import org.opentripplanner.common.geometry.GraphUtils;
 import org.opentripplanner.graph_builder.annotation.GraphBuilderAnnotation;
 import org.opentripplanner.graph_builder.annotation.NoFutureDates;
 import org.opentripplanner.kryo.HashBiMapSerializer;
+import org.opentripplanner.model.Agency;
+import org.opentripplanner.model.CalendarService;
+import org.opentripplanner.model.FeedInfo;
+import org.opentripplanner.model.FeedScopedId;
 import org.opentripplanner.model.GraphBundle;
-import org.opentripplanner.profile.StopClusterMode;
+import org.opentripplanner.model.Stop;
+import org.opentripplanner.model.Trip;
+import org.opentripplanner.model.calendar.CalendarServiceData;
+import org.opentripplanner.model.calendar.ServiceDate;
 import org.opentripplanner.routing.alertpatch.AlertPatch;
-import org.opentripplanner.routing.core.MortonVertexComparatorFactory;
+import org.opentripplanner.routing.algorithm.raptor.transit.TransitLayer;
+import org.opentripplanner.routing.algorithm.raptor.transit.mappers.TransitLayerMapper;
 import org.opentripplanner.routing.core.TransferTable;
 import org.opentripplanner.routing.core.TraverseMode;
 import org.opentripplanner.routing.edgetype.EdgeWithCleanup;
@@ -52,26 +58,41 @@ import org.opentripplanner.routing.services.StreetVertexIndexFactory;
 import org.opentripplanner.routing.services.StreetVertexIndexService;
 import org.opentripplanner.routing.services.notes.StreetNotesService;
 import org.opentripplanner.routing.trippattern.Deduplicator;
-import org.opentripplanner.routing.vertextype.PatternArriveVertex;
 import org.opentripplanner.routing.vertextype.TransitStop;
-import org.opentripplanner.standalone.Router;
-import org.opentripplanner.traffic.StreetSpeedSnapshotSource;
 import org.opentripplanner.updater.GraphUpdaterConfigurator;
 import org.opentripplanner.updater.GraphUpdaterManager;
 import org.opentripplanner.updater.stoptime.TimetableSnapshotSource;
-import org.opentripplanner.util.InstanceCountingClassResolver;
 import org.opentripplanner.util.WorldEnvelope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
-import java.util.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.OutputStream;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.prefs.Preferences;
 /**
  * A graph is really just one or more indexes into a set of vertexes. It used to keep edgelists for each vertex, but those are in the vertex now.
  */
-public class Graph implements Serializable {
+public class Graph implements Serializable, AddBuilderAnnotation {
 
     private static final Logger LOG = LoggerFactory.getLogger(Graph.class);
 
@@ -99,8 +120,8 @@ public class Graph implements Serializable {
 
     private GraphBundle bundle;
 
-    /* vertex index by name is reconstructed from edges */
-    private transient Map<String, Vertex> vertices;
+    /* Ideally we could just get rid of vertex labels, but they're used in tests and graph building. */
+    private Map<String, Vertex> vertices = new ConcurrentHashMap<>();
 
     private transient CalendarService calendarService;
 
@@ -114,10 +135,6 @@ public class Graph implements Serializable {
     public transient StreetVertexIndexService streetIndex;
 
     public transient GraphIndex index;
-
-    private transient GeometryIndex geomIndex;
-
-    private transient SampleFactory sampleFactory;
 
     public final transient Deduplicator deduplicator = new Deduplicator();
 
@@ -136,8 +153,6 @@ public class Graph implements Serializable {
     private Collection<String> feedIds = new HashSet<>();
 
     private Map<String, FeedInfo> feedInfoForId = new HashMap<>();
-
-    private VertexComparatorFactory vertexComparatorFactory = new MortonVertexComparatorFactory();
 
     private transient TimeZone timeZone = null;
 
@@ -205,31 +220,44 @@ public class Graph implements Serializable {
     /** Has information how much time alighting a vehicle takes. Can be significant eg in airplanes or ferries. */
     public Map<TraverseMode, Integer> alightTimes = Collections.EMPTY_MAP;
 
-    /** A speed source for traffic data */
-    public transient StreetSpeedSnapshotSource streetSpeedSource;
-    
-    /** How should we cluster stops? By 'proximity' or 'ParentStation' */
-    public StopClusterMode stopClusterMode = StopClusterMode.proximity;
-
     /** The difference in meters between the WGS84 ellipsoid height and geoid height at the graph's center */
     public Double ellipsoidToGeoidDifference = 0.0;
 
     /** Parent stops **/
     public Map<FeedScopedId, Stop> parentStopById = new HashMap<>();
 
+    // TripPatterns used to be reached through hop edges, but we're not creating on-board transit vertices/edges anymore.
+    public Map<String, TripPattern> tripPatternForId = Maps.newHashMap();
+
+    /** Interlining relationships between trips. */
+    public final BiMap<Trip,Trip> interlinedTrips = HashBiMap.create();
+
+    /** Data model for Raptor routing, with realtime updates applied (if any). */
+    public transient TransitLayer transitLayer;
+
+    /** Data model for Raptor routing, with realtime updates applied (if any). */
+    public transient TransitLayer realtimeTransitLayer;
+
+    // Hack. I've tried three different ways of generating unique labels.
+    // Previously we were just tolerating edge label collisions.
+    // For some reason we're repeatedly generating splits on the same edge objects, despite a comment that said it was
+    // guaranteed there would only ever be one split per edge. This is going to fail as soon as we load a base OSM graph
+    // and build transit on top of it.
+    public long nextSplitNumber = 0;
+
     public Graph(Graph basedOn) {
         this();
         this.bundle = basedOn.getBundle();
     }
 
+    // Constructor for deserialization.
     public Graph() {
-        this.vertices = new ConcurrentHashMap<String, Vertex>();
-        this.edgeById = new ConcurrentHashMap<Integer, Edge>();
-        this.vertexById = new ConcurrentHashMap<Integer, Vertex>();
+
     }
 
     /**
-     * Add the given vertex to the graph. Ideally, only vertices should add themselves to the graph, when they are constructed or deserialized.
+     * Add the given vertex to the graph. Ideally, only vertices should add themselves to the graph,
+     * when they are constructed or deserialized.
      */
     public void addVertex(Vertex v) {
         Vertex old = vertices.put(v.getLabel(), v);
@@ -238,21 +266,6 @@ public class Graph implements Serializable {
                 LOG.error("repeatedly added the same vertex: {}", v);
             else
                 LOG.error("duplicate vertex label in graph (added vertex to graph anyway): {}", v);
-        }
-    }
-
-    /**
-     * Removes a vertex from the graph.
-     *
-     * Called from streetutils, must be public for now
-     *
-     * @param v
-     */
-    public void removeVertex(Vertex v) {
-        if (vertices.remove(v.getLabel()) != v) {
-            LOG.error(
-                    "attempting to remove vertex that is not in graph (or mapping value was null): {}",
-                    v);
         }
     }
 
@@ -268,7 +281,6 @@ public class Graph implements Serializable {
 
             turnRestrictions.remove(e);
             streetNotesService.removeStaticNotes(e);
-            edgeById.remove(e.getId());
 
             if (e instanceof EdgeWithCleanup) ((EdgeWithCleanup) e).detach();
 
@@ -300,19 +312,6 @@ public class Graph implements Serializable {
     }
 
     /**
-     * Returns the vertex with the given ID or null if none is present.
-     *
-     * NOTE: you may need to run rebuildVertexAndEdgeIndices() for the indices
-     * to be accurate.
-     *
-     * @param id
-     * @return
-     */
-    public Vertex getVertexById(int id) {
-        return this.vertexById.get(id);
-    }
-
-    /**
      * Get all the vertices in the graph.
      * @return
      */
@@ -321,24 +320,10 @@ public class Graph implements Serializable {
     }
 
     /**
-     * Returns the edge with the given ID or null if none is present.
-     *
-     * NOTE: you may need to run rebuildVertexAndEdgeIndices() for the indices
-     * to be accurate.
-     *
-     * @param id
-     * @return
-     */
-    public Edge getEdgeById(int id) {
-        return edgeById.get(id);
-    }
-
-    /**
-     * Return all the edges in the graph.
-     * @return
+     * Return all the edges in the graph. Derived from vertices on demand.
      */
     public Collection<Edge> getEdges() {
-        Set<Edge> edges = new HashSet<Edge>();
+        Set<Edge> edges = new HashSet<>();
         for (Vertex v : this.getVertices()) {
             edges.addAll(v.getOutgoing());
         }
@@ -593,48 +578,7 @@ public class Graph implements Serializable {
         return ne;
     }
 
-    /**
-     * Add a collection of edges from the edgesById index.
-     * @param es
-     */
-    private void addEdgesToIndex(Collection<Edge> es) {
-        for (Edge e : es) {
-            this.edgeById.put(e.getId(), e);
-        }
-    }
-    
-    /**
-     * Rebuilds any indices on the basis of current vertex and edge IDs.
-     * 
-     * If you want the index to be accurate, you must run this every time the 
-     * vertex or edge set changes.
-     * 
-     * TODO(flamholz): keep the indices up to date with changes to the graph.
-     * This is not simple because the Vertex constructor may add itself to the graph
-     * before the Vertex has any edges, so updating indices on addVertex is insufficient.
-     */
-    public void rebuildVertexAndEdgeIndices() {
-        this.vertexById = new HashMap<Integer, Vertex>(Vertex.getMaxIndex());
-        Collection<Vertex> vertices = getVertices();
-        for (Vertex v : vertices) {
-            vertexById.put(v.getIndex(), v);
-        }
-
-        // Create map from edge ids to edges.
-        this.edgeById = new HashMap<Integer, Edge>();
-        for (Vertex v : vertices) {
-            // TODO(flamholz): this check seems superfluous.
-            if (v == null) {
-                continue;
-            }
-
-            // Assumes that all the edges appear in at least one outgoing edge list.
-            addEdgesToIndex(v.getOutgoing());
-        }
-    }
-
-    private void readObject(ObjectInputStream inputStream) throws ClassNotFoundException,
-            IOException {
+    private void readObject(ObjectInputStream inputStream) throws ClassNotFoundException, IOException {
         inputStream.defaultReadObject();
     }
 
@@ -687,46 +631,48 @@ public class Graph implements Serializable {
         streetIndex = indexFactory.newIndex(this);
         LOG.debug("street index built.");
         LOG.debug("Rebuilding edge and vertex indices.");
-        rebuildVertexAndEdgeIndices();
-        Set<TripPattern> tableTripPatterns = Sets.newHashSet();
-        for (PatternArriveVertex pav : Iterables.filter(this.getVertices(), PatternArriveVertex.class)) {
-            tableTripPatterns.add(pav.getTripPattern());
-        }
-        for (TripPattern ttp : tableTripPatterns) {
-            if (ttp != null) ttp.scheduledTimetable.finish(); // skip frequency-based patterns with no table (null)
+        for (TripPattern tp : tripPatternForId.values()) {
+            // Skip frequency-based patterns which have no timetable (null)
+            if (tp != null) tp.scheduledTimetable.finish();
         }
         // TODO: Move this ^ stuff into the graph index
         this.index = new GraphIndex(this);
+
+        /** Create transit layer for Raptor routing */
+        LOG.info("Creating transit layer for Raptor routing.");
+        // First for the scheduled timetables.
+        this.transitLayer = TransitLayerMapper.map(this);
+        this.realtimeTransitLayer = transitLayer;
+        // Then in a loop, recreate the transitLayer for real-time updated timetables.
+        // This could eventually be done with a PollingGraphUpdater.
+        new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(1000 * 20);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                if (this.timetableSnapshotSource != null) {
+                    // TODO this is creating a new TransitLayer even if no changes have been made to the timetables.
+                    // TODO this is not accounting for any new patterns created by realtime "add trip" messages.
+                    this.realtimeTransitLayer = TransitLayerMapper.map(this);
+                }
+            }
+        }, "Realtime Transit Layer Creator").start();
     }
     
     public static Graph load(InputStream in) {
         // TODO store version information, halt load if versions mismatch
         Input input = new Input(in);
         Kryo kryo = makeKryo();
-        Graph graph = (Graph) kryo.readClassAndObject(input);
-        LOG.debug("Basic graph info read.");
+        GraphAndEdges graphAndEdges = (GraphAndEdges) kryo.readClassAndObject(input);
+        Graph graph = graphAndEdges.graph;
+        LOG.debug("Graph read.");
         if (graph.graphVersionMismatch()) {
             throw new RuntimeException("Graph version mismatch detected.");
         }
-        // Vertex edge lists are transient to avoid excessive recursion depth during serialization.
-        // vertex list is transient because it can be reconstructed from edges.
-        LOG.debug("Loading edges...");
-        List<Edge> edges = (ArrayList<Edge>) kryo.readClassAndObject(input);
-        graph.vertices = new ConcurrentHashMap<>(); // why is this concurrent?
-
-        for (Edge e : edges) {
-            Vertex fromVertex = e.getFromVertex();
-            Vertex toVertex = e.getToVertex();
-            graph.vertices.put(fromVertex.getLabel(), fromVertex);
-            graph.vertices.put(toVertex.getLabel(), toVertex);
-            // Compensating for the fact that we're not using the standard Java de/serialization methods.
-            fromVertex.initEdgeListsIfNeeded();
-            toVertex.initEdgeListsIfNeeded();
-            fromVertex.addOutgoing(e);
-            toVertex.addIncoming(e);
-        }
-
-        LOG.info("Main graph read. |V|={} |E|={}", graph.countVertices(), graph.countEdges());
+        graphAndEdges.reconstructEdgeLists();
+        LOG.info("Graph read. |V|={} |E|={}", graph.countVertices(), graph.countEdges());
         graph.index(new DefaultStreetVertexIndexFactory());
         return graph;
     }
@@ -822,29 +768,13 @@ public class Graph implements Serializable {
     public void save(OutputStream outputStream) {
         Kryo kryo = makeKryo();
         LOG.debug("Consolidating edges...");
+        GraphAndEdges graphAndEdges = new GraphAndEdges(this);
         Output output = new Output(outputStream);
-        // this is not space efficient
-        List<Edge> edges = new ArrayList<Edge>(this.countEdges());
-        for (Vertex v : getVertices()) {
-            // there are assumed to be no edges in an incoming list that are not
-            // in an outgoing list
-            edges.addAll(v.getOutgoing());
-            if (v.getDegreeOut() + v.getDegreeIn() == 0)
-                LOG.debug("vertex {} has no edges, it will not survive serialization.", v);
-        }
-        LOG.debug("Assigning vertex/edge ID numbers...");
-        this.rebuildVertexAndEdgeIndices();
-        LOG.debug("Writing edges...");
-        kryo.writeClassAndObject(output, this);
-        kryo.writeClassAndObject(output, edges);
+        kryo.writeClassAndObject(output, graphAndEdges);
         output.close();
         LOG.info("Graph written.");
-        // Summarize serialized classes and associated serializers:
+        // Summarize serialized classes and associated serializers to stdout:
         // ((InstanceCountingClassResolver) kryo.getClassResolver()).summarize();
-    }
-
-    public Integer getIdForEdge(Edge edge) {
-        return edge.getId();
     }
 
     public CalendarService getCalendarService() {
@@ -995,23 +925,6 @@ public class Graph implements Serializable {
 
     public WorldEnvelope getEnvelope() {
         return this.envelope;
-    }
-
-    // lazy-init geom index on an as needed basis
-    public GeometryIndex getGeomIndex() {
-    	
-    	if(this.geomIndex == null)
-    		this.geomIndex = new GeometryIndex(this);
-    	
-    	return this.geomIndex;
-    }
-
-    // lazy-init sample factor on an as needed basis
-    public SampleFactory getSampleFactory() {
-        if(this.sampleFactory == null)
-            this.sampleFactory = new SampleFactory(this);
-
-        return this.sampleFactory;	
     }
 
     /**

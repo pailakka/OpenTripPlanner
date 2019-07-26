@@ -1,4 +1,3 @@
-
 package org.opentripplanner.routing.alertpatch;
 
 import static java.util.Collections.emptyList;
@@ -20,12 +19,8 @@ import org.opentripplanner.model.Stop;
 import org.opentripplanner.model.Trip;
 import org.opentripplanner.api.adapters.AgencyAndIdAdapter;
 import org.opentripplanner.routing.core.State;
-import org.opentripplanner.routing.edgetype.PreAlightEdge;
-import org.opentripplanner.routing.edgetype.PreBoardEdge;
 import org.opentripplanner.routing.edgetype.TripPattern;
-import org.opentripplanner.routing.graph.Edge;
 import org.opentripplanner.routing.graph.Graph;
-import org.opentripplanner.routing.vertextype.TransitStop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -146,40 +141,13 @@ public class AlertPatch implements Serializable {
                     }
                     for (int i = 0; i < tripPattern.stopPattern.stops.length; i++) {
                         if (stop == null || stop.equals(tripPattern.stopPattern.stops[i])) {
-                            graph.addAlertPatch(tripPattern.boardEdges[i], this);
-                            graph.addAlertPatch(tripPattern.alightEdges[i], this);
+                            throw new UnsupportedOperationException("Cannot add Alert patch to Board/Alight edges - transit edges do not exist anymore under Raptor.");
                         }
                     }
                 }
             }
         } else if (stop != null) {
-            TransitStop transitStop = graph.index.stopVertexForStop.get(stop);
-
-            for (Edge edge : transitStop.getOutgoing()) {
-                if (edge instanceof PreBoardEdge) {
-                    graph.addAlertPatch(edge, this);
-                    break;
-                }
-            }
-
-            for (Edge edge : transitStop.getIncoming()) {
-                if (edge instanceof PreAlightEdge) {
-                    graph.addAlertPatch(edge, this);
-                    break;
-                }
-            }
-            tripPatterns = emptyList();
-        } else {
-            tripPatterns = emptyList();
-        }
-    }
-
-    private void addAlertPatchToEdges(Graph graph, Stop stop, TripPattern tripPattern) {
-        for (int i = 0; i < tripPattern.stopPattern.stops.length; i++) {
-            if (stop == null || stop.equals(tripPattern.stopPattern.stops[i])) {
-                graph.addAlertPatch(tripPattern.boardEdges[i], this);
-                graph.addAlertPatch(tripPattern.alightEdges[i], this);
-            }
+            throw new UnsupportedOperationException("Cannot add alert to TransitStop - PreBoard and PreAlight edges no longer exist.");
         }
     }
 
@@ -219,28 +187,13 @@ public class AlertPatch implements Serializable {
                     }
                     for (int i = 0; i < tripPattern.stopPattern.stops.length; i++) {
                         if (stop == null || stop.equals(tripPattern.stopPattern.stops[i])) {
-                            graph.removeAlertPatch(tripPattern.boardEdges[i], this);
-                            graph.removeAlertPatch(tripPattern.alightEdges[i], this);
+                            throw new UnsupportedOperationException("Cannot remove Alert patch from Board/Alight edges - transit edges do not exist anymore under Raptor.");
                         }
                     }
                 }
             }
         } else if (stop != null) {
-            TransitStop transitStop = graph.index.stopVertexForStop.get(stop);
-
-            for (Edge edge : transitStop.getOutgoing()) {
-                if (edge instanceof PreBoardEdge) {
-                    graph.removeAlertPatch(edge, this);
-                    break;
-                }
-            }
-
-            for (Edge edge : transitStop.getIncoming()) {
-                if (edge instanceof PreAlightEdge) {
-                    graph.removeAlertPatch(edge, this);
-                    break;
-                }
-            }
+            throw new UnsupportedOperationException("Cannot remove alert from TransitStop - PreBoard and PreAlight edges no longer exist.");
         }
     }
 

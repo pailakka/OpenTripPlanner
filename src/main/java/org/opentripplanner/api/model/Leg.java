@@ -47,6 +47,7 @@ public class Leg {
      * "scheduled time of arrival at alighting stop" = endTime - arrivalDelay
      */
     public int arrivalDelay = 0;
+
     /**
      * Whether there is real-time data about this Leg
      */

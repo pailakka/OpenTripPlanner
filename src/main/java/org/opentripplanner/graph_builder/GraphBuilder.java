@@ -1,7 +1,7 @@
 package org.opentripplanner.graph_builder;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Lists;
+import org.opentripplanner.ext.transferanalyzer.DirectTransferAnalyzer;
 import org.opentripplanner.graph_builder.model.GtfsBundle;
 import org.opentripplanner.graph_builder.module.DirectTransferGenerator;
 import org.opentripplanner.graph_builder.module.EmbedConfig;
@@ -21,13 +21,12 @@ import org.opentripplanner.graph_builder.services.ned.ElevationGridCoverageFacto
 import org.opentripplanner.openstreetmap.impl.AnyFileBasedOpenStreetMapProviderImpl;
 import org.opentripplanner.openstreetmap.services.OpenStreetMapProvider;
 import org.opentripplanner.reflect.ReflectionLibrary;
-import org.opentripplanner.routing.core.RoutingRequest;
 import org.opentripplanner.routing.graph.Graph;
 import org.opentripplanner.standalone.CommandLineParameters;
 import org.opentripplanner.standalone.GraphBuilderParameters;
-import org.opentripplanner.standalone.OTPMain;
-import org.opentripplanner.standalone.Router;
 import org.opentripplanner.standalone.S3BucketConfig;
+import org.opentripplanner.standalone.config.GraphConfig;
+import org.opentripplanner.util.OTPFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -48,60 +47,22 @@ public class GraphBuilder implements Runnable {
     
     private static Logger LOG = LoggerFactory.getLogger(GraphBuilder.class);
 
-    public static final String BUILDER_CONFIG_FILENAME = "build-config.json";
-
-    private List<GraphBuilderModule> _graphBuilderModules = new ArrayList<GraphBuilderModule>();
+    private List<GraphBuilderModule> graphBuilderModules = new ArrayList<>();
 
     private final File graphFile;
-    
-    private boolean _alwaysRebuild = true;
 
-    private List<RoutingRequest> modeList;
-    
-    private String baseGraph = null;
-    
     private Graph graph = new Graph();
 
     /** Should the graph be serialized to disk after being created or not? */
-    public boolean serializeGraph = true;
+    private boolean serializeGraph = true;
 
-    public GraphBuilder(File path, GraphBuilderParameters builderParams) {
+    private GraphBuilder(File path) {
         MDC.put("routerPath", path.getAbsolutePath());
         graphFile = new File(path, "Graph.obj");
-        graph.stopClusterMode = builderParams.stopClusterMode;
     }
 
-    public GraphBuilder() {
-        graphFile = new File(System.getProperty("java.io.tmpdir"), "Graph.obj");
-    }
-
-    public void addModule(GraphBuilderModule loader) {
-        _graphBuilderModules.add(loader);
-    }
-
-    public void setGraphBuilders(List<GraphBuilderModule> graphLoaders) {
-        _graphBuilderModules = graphLoaders;
-    }
-
-    public void setAlwaysRebuild(boolean alwaysRebuild) {
-        _alwaysRebuild = alwaysRebuild;
-    }
-    
-    public void setBaseGraph(String baseGraph) {
-        this.baseGraph = baseGraph;
-        try {
-            graph = Graph.load(new File(baseGraph));
-        } catch (Exception e) {
-            throw new RuntimeException("error loading base graph");
-        }
-    }
-
-    public void addMode(RoutingRequest mo) {
-        modeList.add(mo);
-    }
-
-    public void setModes(List<RoutingRequest> modeList) {
-        this.modeList = modeList;
+    private void addModule(GraphBuilderModule loader) {
+        graphBuilderModules.add(loader);
     }
 
     public Graph getGraph() {
@@ -114,12 +75,8 @@ public class GraphBuilder implements Runnable {
 
         if (serializeGraph) {
         	
-            if (graphFile == null) {
-                throw new RuntimeException("graphBuilderTask has no attribute graphFile.");
-            }
-
-            if( graphFile.exists() && ! _alwaysRebuild) {
-                LOG.info("graph already exists and alwaysRebuild=false => skipping graph build");
+            if (graphFile.exists()) {
+                LOG.info("graph already exists => skipping graph build");
                 return;
             }
         	
@@ -136,12 +93,12 @@ public class GraphBuilder implements Runnable {
         }
 
         // Check all graph builder inputs, and fail fast to avoid waiting until the build process advances.
-        for (GraphBuilderModule builder : _graphBuilderModules) {
+        for (GraphBuilderModule builder : graphBuilderModules) {
             builder.checkInputs();
         }
         
         HashMap<Class<?>, Object> extra = new HashMap<Class<?>, Object>();
-        for (GraphBuilderModule load : _graphBuilderModules)
+        for (GraphBuilderModule load : graphBuilderModules)
             load.buildGraph(graph, extra);
 
         graph.summarizeBuilderAnnotations();
@@ -161,32 +118,31 @@ public class GraphBuilder implements Runnable {
 
 
     /**
-     * Factory method to create and configure a GraphBuilder with all the appropriate modules to build a graph from
-     * the files in the given directory, accounting for any configuration files located there.
+     * Factory method to create and configure a GraphBuilder with all the appropriate modules
+     * to build a graph from the files in the given configuration.
      *
+     * TODO OTP2 - Remove comment when we remove support for multiple routers
      * TODO parameterize with the router ID and call repeatedly to make multiple builders
-     * note of all command line options this is only using  params.inMemory params.preFlight and params.build directory
+     * note of all command line options this is only using  params.inMemory params.preFlight
+     * and params.build directory
      */
-    public static GraphBuilder forDirectory(CommandLineParameters params, File dir) {
+    public static GraphBuilder create(CommandLineParameters params, GraphConfig config) {
         LOG.info("Wiring up and configuring graph builder task.");
         List<File> gtfsFiles = Lists.newArrayList();
         List<File> osmFiles =  Lists.newArrayList();
-        JsonNode builderConfig = null;
-        JsonNode routerConfig = null;
         File demFile = null;
+        File dir = params.build;
+
         LOG.info("Searching for graph builder input files in {}", dir);
-        if ( ! dir.isDirectory() && dir.canRead()) {
-            LOG.error("'{}' is not a readable directory.", dir);
-            return null;
-        }
+
         // Find and parse config files first to reveal syntax errors early without waiting for graph build.
-        builderConfig = OTPMain.loadJson(new File(dir, BUILDER_CONFIG_FILENAME));
-        GraphBuilderParameters builderParams = new GraphBuilderParameters(builderConfig);
+        GraphBuilderParameters builderParams = new GraphBuilderParameters(config.builderConfig());
 
-        GraphBuilder graphBuilder = new GraphBuilder(dir, builderParams);
+        GraphBuilder graphBuilder = new GraphBuilder(dir);
 
-        // Load the router config JSON to fail fast, but we will only apply it later when a router starts up
-        routerConfig = OTPMain.loadJson(new File(dir, Router.ROUTER_CONFIG_FILENAME));
+        // Load the router config JSON to fail fast, but we will only apply it later when a router
+        // starts up
+        config.routerConfig();
         LOG.info(ReflectionLibrary.dumpFields(builderParams));
 
         for (File file : dir.listFiles()) {
@@ -277,7 +233,6 @@ public class GraphBuilder implements Runnable {
             S3BucketConfig bucketConfig = builderParams.elevationBucket;
             File cacheDirectory = new File(params.cacheDirectory, "ned");
             DegreeGridNEDTileSource awsTileSource = new DegreeGridNEDTileSource();
-            awsTileSource = new DegreeGridNEDTileSource();
             awsTileSource.awsAccessKey = bucketConfig.accessKey;
             awsTileSource.awsSecretKey = bucketConfig.secretKey;
             awsTileSource.awsBucketName = bucketConfig.bucketName;
@@ -303,8 +258,12 @@ public class GraphBuilder implements Runnable {
                 // This module will use streets or straight line distance depending on whether OSM data is found in the graph.
                 graphBuilder.addModule(new DirectTransferGenerator(builderParams.maxTransferDistance));
             }
+            // Analyze routing between stops to generate report
+            if (OTPFeature.TransferAnalyzer.isOn()) {
+                graphBuilder.addModule(new DirectTransferAnalyzer(builderParams.maxTransferDistance));
+            }
         }
-        graphBuilder.addModule(new EmbedConfig(builderConfig, routerConfig));
+        graphBuilder.addModule(new EmbedConfig(config.builderConfig(), config.routerConfig()));
         if (builderParams.htmlAnnotations) {
             graphBuilder.addModule(new AnnotationsToHTML(params.build, builderParams.maxHtmlAnnotationsPerFile));
         }
@@ -317,7 +276,7 @@ public class GraphBuilder implements Runnable {
      * We want to detect even those that are not graph builder inputs so we can effectively warn when unrecognized file
      * types are present. This helps point out when config files have been misnamed (builder-config vs. build-config).
      */
-    private static enum InputFileType {
+    private enum InputFileType {
         GTFS, OSM, DEM, CONFIG, GRAPH, OTHER;
         public static InputFileType forFile(File file) {
             String name = file.getName();
@@ -334,12 +293,9 @@ public class GraphBuilder implements Runnable {
             if (name.endsWith(".osm.xml")) return OSM;
             if (name.endsWith(".tif") || name.endsWith(".tiff")) return DEM; // Digital elevation model (elevation raster)
             if (name.equals("Graph.obj")) return GRAPH;
-            if (name.equals(GraphBuilder.BUILDER_CONFIG_FILENAME) || name.equals(Router.ROUTER_CONFIG_FILENAME)) {
-                return CONFIG;
-            }
+            if (GraphConfig.isGraphConfigFile(name)) return CONFIG;
             return OTHER;
         }
     }
-
 }
 

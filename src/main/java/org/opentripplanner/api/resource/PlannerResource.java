@@ -2,9 +2,14 @@ package org.opentripplanner.api.resource;
 
 import org.glassfish.grizzly.http.server.Request;
 import org.opentripplanner.api.common.RoutingResource;
+import org.opentripplanner.api.model.Itinerary;
+import org.opentripplanner.api.model.Place;
 import org.opentripplanner.api.model.TripPlan;
 import org.opentripplanner.api.model.error.PlannerError;
+import org.opentripplanner.common.geometry.SphericalDistanceLibrary;
+import org.opentripplanner.routing.algorithm.raptor.router.RaptorRouter;
 import org.opentripplanner.routing.core.RoutingRequest;
+import org.opentripplanner.routing.error.PathNotFoundException;
 import org.opentripplanner.routing.impl.GraphPathFinder;
 import org.opentripplanner.routing.spt.GraphPath;
 import org.opentripplanner.standalone.Router;
@@ -20,7 +25,11 @@ import javax.ws.rs.core.UriInfo;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.opentripplanner.api.resource.ServerInfo.Q;
 
@@ -62,14 +71,36 @@ public class PlannerResource extends RoutingResource {
             /* Fill in request fields from query parameters via shared superclass method, catching any errors. */
             request = super.buildRequest();
             router = otpServer.getRouter(request.routerId);
+            request.setRoutingContext(router.graph);
 
-            /* Find some good GraphPaths through the OTP Graph. */
-            GraphPathFinder gpFinder = new GraphPathFinder(router); // we could also get a persistent router-scoped GraphPathFinder but there's no setup cost here
-            paths = gpFinder.graphPathFinderEntryPoint(request);
+            List<Itinerary> itineraries = new ArrayList<>();
 
-            /* Convert the internal GraphPaths to a TripPlan object that is included in an OTP web service Response. */
-            TripPlan plan = GraphPathToTripPlanConverter.generatePlan(paths, request);
-            response.setPlan(plan);
+            if (request.modes.getNonTransitSet().isValid()) {
+                double distance = SphericalDistanceLibrary.distance(request.rctx.origin.getCoordinate(), request.rctx.target.getCoordinate());
+                double limit = request.maxWalkDistance * 2;
+                // Handle int overflow, in which case the multiplication will be less than zero
+                if (limit < 0 || distance < limit) {
+                    itineraries.addAll(findNonTransitItineraries(request, router));
+                }
+            }
+
+            if (request.modes.isTransit()) {
+                // Route on realtime data, and compare with scheduled data while converting to an Itinerary.
+                RaptorRouter raptorRouter = new RaptorRouter(request, router.graph.realtimeTransitLayer);
+                itineraries.addAll(raptorRouter.route());
+            }
+
+            if (itineraries.isEmpty()) {
+                throw new PathNotFoundException();
+            }
+
+            TripPlan tripPlan = createTripPlan(request, itineraries);
+            response.setPlan(tripPlan);
+
+            /* Populate up the elevation metadata */
+            response.elevationMetadata = new ElevationMetadata();
+            response.elevationMetadata.ellipsoidToGeoidDifference = router.graph.ellipsoidToGeoidDifference;
+            response.elevationMetadata.geoidElevation = request.geoidElevation;
 
         } catch (Exception e) {
             PlannerError error = new PlannerError(e);
@@ -84,11 +115,6 @@ public class PlannerResource extends RoutingResource {
                 request.cleanup(); // TODO verify that this cleanup step is being done on Analyst web services
             }
         }
-
-        /* Populate up the elevation metadata */
-        response.elevationMetadata = new ElevationMetadata();
-        response.elevationMetadata.ellipsoidToGeoidDifference = router.graph.ellipsoidToGeoidDifference;
-        response.elevationMetadata.geoidElevation = request.geoidElevation;
 
         /* Log this request if such logging is enabled. */
         if (request != null && router != null && router.requestLogger != null) {
@@ -121,7 +147,39 @@ public class PlannerResource extends RoutingResource {
             }
             router.requestLogger.info(sb.toString());
         }
+
         return response;
     }
 
+    private List<Itinerary> findNonTransitItineraries(RoutingRequest request, Router router) {
+        RoutingRequest nonTransitRequest = request.clone();
+        nonTransitRequest.modes.setTransit(false);
+
+        try {
+            // we could also get a persistent router-scoped GraphPathFinder but there's no setup cost here
+            GraphPathFinder gpFinder = new GraphPathFinder(router);
+            List<GraphPath> paths = gpFinder.graphPathFinderEntryPoint(nonTransitRequest);
+
+            /* Convert the internal GraphPaths to a TripPlan object that is included in an OTP web service Response. */
+            TripPlan plan = GraphPathToTripPlanConverter.generatePlan(paths, request);
+            return plan.itinerary;
+        } catch (PathNotFoundException e) {
+            return Collections.emptyList();
+        }
+    }
+
+    private TripPlan createTripPlan(RoutingRequest request, List<Itinerary> itineraries) {
+        Place from = new Place();
+        Place to = new Place();
+        if (!itineraries.isEmpty()) {
+            from = itineraries.get(0).legs.get(0).from;
+            to = itineraries.get(0).legs.get(itineraries.get(0).legs.size() - 1).to;
+        }
+        TripPlan tripPlan = new TripPlan(from, to, request.getDateTime());
+        itineraries = itineraries.stream().sorted(Comparator.comparing(i -> i.endTime))
+                .limit(request.numItineraries).collect(Collectors.toList());
+        tripPlan.itinerary = itineraries;
+        LOG.info("Returning {} itineraries", itineraries.size());
+        return tripPlan;
+    }
 }

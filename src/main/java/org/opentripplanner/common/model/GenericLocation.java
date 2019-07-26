@@ -1,11 +1,10 @@
 package org.opentripplanner.common.model;
 
-import com.google.common.base.Joiner;
-import com.vividsolutions.jts.geom.Coordinate;
-
 import java.io.Serializable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.locationtech.jts.geom.Coordinate;
 
 /**
  * Class describing a location provided by clients of routing. Used to describe end points
@@ -63,7 +62,7 @@ public class GenericLocation implements Cloneable, Serializable {
      * The default value setting for the location slack, in seconds.
      */
     private static final int DEFAULT_LOCATION_SLACK = 0;
-    
+
     /**
      * The name of the place, if provided.
      */
@@ -85,6 +84,7 @@ public class GenericLocation implements Cloneable, Serializable {
      * The ID of the edge this location is on if any.
      */
     public Integer edgeId;
+
 
     /**
      * Coordinates of the place, if provided.
@@ -276,14 +276,7 @@ public class GenericLocation implements Cloneable, Serializable {
         return this.lat != null && this.lng != null;
     }
 
-    /**
-     * Returns true if getEdgeId would not return null.
-     * @return
-     */
-    public boolean hasEdgeId() {
-        return this.edgeId != null;
-    }
-
+    
     public NamedPlace getNamedPlace() {
         return new NamedPlace(this.name, this.place);
     }
@@ -326,9 +319,6 @@ public class GenericLocation implements Cloneable, Serializable {
         sb.append("<GenericLocation lat,lng=").append(this.lat).append(",").append(this.lng);
         if (this.hasHeading()) {
             sb.append(" heading=").append(this.heading);
-        }
-        if (this.hasEdgeId()) {
-            sb.append(" edgeId=").append(this.edgeId);
         }
         sb.append(">");
         return sb.toString();

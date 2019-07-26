@@ -23,7 +23,7 @@ import org.opentripplanner.routing.location.TemporaryStreetLocation;
 import org.opentripplanner.routing.spt.GraphPath;
 import org.opentripplanner.routing.spt.ShortestPathTree;
 
-import com.vividsolutions.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Coordinate;
 import org.opentripplanner.util.NonLocalizedString;
 
 public class AStarTest {
@@ -213,7 +213,6 @@ public class AStarTest {
     public void testMultipleTargets() {
         RoutingRequest options = new RoutingRequest();
         options.walkSpeed = 1.0;
-        options.batch = true;
         options.setRoutingContext(graph, graph.getVertex("56th_24th"), graph.getVertex("leary_20th"));
 
         Set<Vertex> targets = new HashSet<Vertex>();

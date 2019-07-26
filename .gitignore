@@ -30,3 +30,5 @@ _site/
 /otp-batch-analyst
 graphs/
 taggedStops.log
+
+*.DS_Store

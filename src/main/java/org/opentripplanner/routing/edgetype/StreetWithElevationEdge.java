@@ -7,7 +7,7 @@ import org.opentripplanner.routing.util.ElevationUtils;
 import org.opentripplanner.routing.util.SlopeCosts;
 import org.opentripplanner.routing.vertextype.StreetVertex;
 
-import com.vividsolutions.jts.geom.LineString;
+import org.locationtech.jts.geom.LineString;
 import org.opentripplanner.util.I18NString;
 import org.opentripplanner.util.NonLocalizedString;
 
@@ -103,13 +103,12 @@ public class StreetWithElevationEdge extends StreetEdge {
      */
     @Override
     public double getSlopeWalkSpeedEffectiveLength() {
-        // Convert from fixed millimeters to double meters
         return effectiveWalkFactor * getDistance();
     }
 
     @Override
     public String toString() {
-        return "StreetWithElevationEdge(" + getId() + ", " + getName() + ", " + fromv + " -> "
+        return "StreetWithElevationEdge(" + getName() + ", " + fromv + " -> "
                 + tov + " length=" + this.getDistance() + " carSpeed=" + this.getCarSpeed()
                 + " permission=" + this.getPermission() + ")";
     }

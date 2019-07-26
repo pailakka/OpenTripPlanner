@@ -1,19 +1,19 @@
 package org.opentripplanner.api.resource;
 
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.LineString;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.LineString;
 import org.opentripplanner.api.model.*;
 import org.opentripplanner.api.resource.TripPlanFilter;
 import org.opentripplanner.common.geometry.DirectionUtils;
 import org.opentripplanner.common.geometry.GeometryUtils;
 import org.opentripplanner.common.geometry.PackedCoordinateSequence;
 import org.opentripplanner.common.model.P2;
+import org.opentripplanner.model.BikeRentalStationInfo;
 import org.opentripplanner.model.Agency;
 import org.opentripplanner.model.Route;
 import org.opentripplanner.model.Stop;
 import org.opentripplanner.model.Trip;
-import org.opentripplanner.profile.BikeRentalStationInfo;
 import org.opentripplanner.routing.alertpatch.Alert;
 import org.opentripplanner.routing.alertpatch.AlertPatch;
 import org.opentripplanner.routing.core.*;
@@ -269,10 +269,6 @@ public abstract class GraphPathToTripPlanConverter {
                 legIndexPairs[1] = i;
                 legsIndexes.add(legIndexPairs);
                 legIndexPairs = new int[] {i, states.length - 1};
-            } else if (edge instanceof PatternInterlineDwell) {         // Interlining => leg switch
-                legIndexPairs[1] = i;
-                legsIndexes.add(legIndexPairs);
-                legIndexPairs = new int[] {i + 1, states.length - 1};
             }
         }
 
@@ -327,7 +323,9 @@ public abstract class GraphPathToTripPlanConverter {
 
         leg.legGeometry = PolylineEncoder.createEncodings(geometry);
 
-        leg.interlineWithPreviousLeg = states[0].getBackEdge() instanceof PatternInterlineDwell;
+        // Interlining information is now in a separate field in Graph, not in edges.
+        // But in any case, with Raptor this method is only being used to translate non-transit legs of paths.
+        leg.interlineWithPreviousLeg = false;
 
         addFrequencyFields(states, leg);
 
@@ -427,19 +425,6 @@ public abstract class GraphPathToTripPlanConverter {
             String alightRule = null;
 
             for (int j = 1; j < legsStates[i].length; j++) {
-                if (legsStates[i][j].getBackEdge() instanceof PatternEdge) {
-                    PatternEdge patternEdge = (PatternEdge) legsStates[i][j].getBackEdge();
-                    TripPattern tripPattern = patternEdge.getPattern();
-
-                    Integer fromIndex = legs.get(i).from.stopIndex;
-                    Integer toIndex = legs.get(i).to.stopIndex;
-
-                    int boardType = (fromIndex != null) ? (tripPattern.getBoardType(fromIndex)) : 0;
-                    int alightType = (toIndex != null) ? (tripPattern.getAlightType(toIndex)) : 0;
-
-                    boardRule = getBoardAlightMessage(boardType);
-                    alightRule = getBoardAlightMessage(alightType);
-                }
                 if (legsStates[i][j].getBackEdge() instanceof PathwayEdge) {
                     legs.get(i).pathway = true;
                 }
@@ -595,7 +580,7 @@ public abstract class GraphPathToTripPlanConverter {
             leg.agencyName = agency.getName();
             leg.agencyUrl = agency.getUrl();
             leg.agencyBrandingUrl = agency.getBrandingUrl();
-            leg.headsign = states[1].getBackDirection();
+            leg.headsign = states[1].backEdge.getDirection();
             leg.route = states[states.length - 1].getBackEdge().getName(requestedLocale);
             leg.routeColor = route.getColor();
             leg.routeId = route.getId();

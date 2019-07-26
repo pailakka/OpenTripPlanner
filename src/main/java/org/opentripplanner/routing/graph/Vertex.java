@@ -15,8 +15,10 @@ import org.opentripplanner.routing.edgetype.StreetEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.vividsolutions.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Coordinate;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.opentripplanner.util.I18NString;
 import org.opentripplanner.util.NonLocalizedString;
 
@@ -25,15 +27,12 @@ import org.opentripplanner.util.NonLocalizedString;
  * incoming and outgoing edges.
  */
 public abstract class Vertex implements Serializable, Cloneable {
+
     private static final long serialVersionUID = MavenVersion.VERSION.getUID();
 
     private static final Logger LOG = LoggerFactory.getLogger(Vertex.class);
 
-    private static int maxIndex = 0;
-
-    private int index;
-    
-    /* short debugging name */
+    /* Short debugging name */
     private final String label;
     
     /* Longer human-readable name for the client */
@@ -47,17 +46,16 @@ public abstract class Vertex implements Serializable, Cloneable {
 
     private transient Edge[] outgoing = new Edge[0];
 
-    
     /* CONSTRUCTORS */
 
     protected Vertex(Graph g, String label, double x, double y) {
         this.label = label;
         this.x = x;
         this.y = y;
-        this.index = maxIndex  ++;
         // null graph means temporary vertex
-        if (g != null)
+        if (g != null) {
             g.addVertex(this);
+        }
         this.name = new NonLocalizedString("(no name provided)");
     }
 
@@ -80,20 +78,9 @@ public abstract class Vertex implements Serializable, Cloneable {
         return sb.toString();
     }
 
-    @Override
-    public int hashCode() {
-        return index;
-    }
-
-    // Stupid method for deserialization, initialize transient fields.
-    // Stopgap until old serialization methods are completely replaced.
-    public void initEdgeListsIfNeeded () {
-        if (this.outgoing == null) {
-            this.outgoing = new Edge[0];
-        }
-        if (this.incoming == null) {
-            this.incoming = new Edge[0];
-        }
+    public void initEdgeLists() {
+        this.outgoing = new Edge[0];
+        this.incoming = new Edge[0];
     }
 
     /* EDGE UTILITY METHODS (use arrays to eliminate copy-on-write set objects) */
@@ -252,21 +239,6 @@ public abstract class Vertex implements Serializable, Cloneable {
         return azimuthTo(other.getCoordinate());
     }
 
-    /** Get this vertex's unique index, that can serve as a hashcode or an index into a table */
-    @XmlTransient
-    public int getIndex() {
-        return index;
-    }
-
-    public void setIndex(int index) {
-        this.index = index;
-    }
-
-    public static int getMaxIndex() {
-        return maxIndex;
-    }
-
-
     /* SERIALIZATION METHODS */
 
     private void writeObject(ObjectOutputStream out) throws IOException {
@@ -278,7 +250,6 @@ public abstract class Vertex implements Serializable, Cloneable {
         in.defaultReadObject();
         this.incoming = new Edge[0];
         this.outgoing = new Edge[0];
-        index = maxIndex++;
     }
 
     /* UTILITY METHODS FOR SEARCHING, GRAPH BUILDING, AND GENERATING WALKSTEPS */

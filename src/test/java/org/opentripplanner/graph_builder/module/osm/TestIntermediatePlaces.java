@@ -21,20 +21,24 @@ import org.opentripplanner.standalone.CommandLineParameters;
 import org.opentripplanner.standalone.OTPServer;
 import org.opentripplanner.standalone.Router;
 
-import java.io.UnsupportedEncodingException;
 import java.util.Calendar;
 import java.util.List;
 import java.util.TimeZone;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Tests for planning with intermediate places
+ * TODO OTP2 - Test is too close to the implementation and will need to be reimplemented.
  */
+@Ignore
 public class TestIntermediatePlaces {
 
     /**
-     * The spacial deviation that we allow in degrees
+     * The spatial deviation that we allow in degrees
      */
     public static final double DELTA = 0.005;
 
@@ -55,12 +59,9 @@ public class TestIntermediatePlaces {
             Router router = otpServer.getGraphService().getRouter("A");
             TestIntermediatePlaces.graphPathFinder = new GraphPathFinder(router);
             timeZone = graph.getTimeZone();
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-            assert false : "Could not build graph: " + e.getMessage();
         } catch (Exception e) {
             e.printStackTrace();
-            assert false : "Could not add transit data: " + e.getMessage();
+            assert false : "Could not add transit data: " + e.toString();
         }
     }
 

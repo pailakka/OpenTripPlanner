@@ -13,7 +13,7 @@ import org.opentripplanner.routing.graph.Vertex;
 import org.opentripplanner.routing.vertextype.BikeRentalStationVertex;
 
 import com.google.common.collect.Sets;
-import com.vividsolutions.jts.geom.LineString;
+import org.locationtech.jts.geom.LineString;
 
 /**
  * Renting or dropping off a rented bike edge.
@@ -44,17 +44,17 @@ public abstract class RentABikeAbstractEdge extends Edge {
          */
         if (!options.modes.contains(TraverseMode.BICYCLE))
             return null;
-        
+
         /*
          * To rent a bike, we need to have one of the networks in allowed networks
          */
         if (noBikeRentalNetworkAllowed(options.allowedBikeRentalNetworks))
             return null;
-        
+
         BikeRentalStationVertex dropoff = (BikeRentalStationVertex) tov;
         if (options.useBikeRentalAvailabilityInformation && dropoff.getBikesAvailable() == 0)
             return null;
-        
+
         StateEditor editor = state.edit(this);
         editor.incrementWeight(options.arriveBy ? options.bikeRentalDropoffCost : options.bikeRentalPickupCost);
         editor.incrementTimeInSeconds(options.arriveBy ? options.bikeRentalDropoffTime : options.bikeRentalPickupTime);
@@ -63,38 +63,38 @@ public abstract class RentABikeAbstractEdge extends Edge {
         editor.setBackMode(state.getNonTransitMode());
         return editor.makeState();
     }
-    
+
     private boolean noBikeRentalNetworkAllowed(Set<String> allowedBikeRentalNetworks) {
         // allowedBikeRentalNetworks parameter is undefined -> allow all networks by default
         if (allowedBikeRentalNetworks == null)
             return false;
-        
+
         // allowedBikeRentalNetworks parameter is defined but empty -> no networks are allowed
         if (allowedBikeRentalNetworks.isEmpty())
             return true;
-        
+
         return Collections.disjoint(networks, allowedBikeRentalNetworks);
     }
 
     protected State traverseDropoff(State state) {
         RoutingRequest options = state.getOptions();
-        
+
         /*
          * To drop off a bike, we need to have one of the networks in allowed networks
          */
         if (noBikeRentalNetworkAllowed(options.allowedBikeRentalNetworks))
             return null;
-        
+
         /*
          * To dropoff a bike, we need to have rented one.
          */
         if (!state.isBikeRenting() || !hasCompatibleNetworks(networks, state.getBikeRentalNetworks()))
             return null;
-        
+
         BikeRentalStationVertex pickup = (BikeRentalStationVertex) tov;
         if (options.useBikeRentalAvailabilityInformation && pickup.getSpacesAvailable() == 0)
             return null;
-        
+
         StateEditor editor = state.edit(this);
         editor.incrementWeight(options.arriveBy ? options.bikeRentalPickupCost : options.bikeRentalDropoffCost);
         editor.incrementTimeInSeconds(options.arriveBy ? options.bikeRentalPickupTime : options.bikeRentalDropoffTime);

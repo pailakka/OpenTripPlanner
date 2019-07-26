@@ -5,7 +5,7 @@ import org.opentripplanner.routing.core.StateEditor;
 import org.opentripplanner.routing.core.TraverseMode;
 import org.opentripplanner.routing.graph.Edge;
 import org.opentripplanner.routing.vertextype.TransitStationStop;
-import com.vividsolutions.jts.geom.LineString;
+import org.locationtech.jts.geom.LineString;
 import java.util.Locale;
 
 /**
@@ -24,9 +24,6 @@ public class TransferEdge extends Edge {
 
     private boolean wheelchairAccessible = true;
 
-    /**
-     * @see Transfer(Vertex, Vertex, double, int)
-     */
     public TransferEdge(TransitStationStop fromv, TransitStationStop tov, double distance) {
         this(fromv, tov, distance, (int) distance);
     }

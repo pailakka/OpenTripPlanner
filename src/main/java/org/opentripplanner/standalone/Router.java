@@ -1,14 +1,12 @@
 package org.opentripplanner.standalone;
 
-import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.FileAppender;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.opentripplanner.analyst.request.*;
-import org.opentripplanner.analyst.scenario.ScenarioStore;
 import org.opentripplanner.inspector.TileRendererManager;
 import org.opentripplanner.reflect.ReflectiveInitializer;
 import org.opentripplanner.routing.core.RoutingRequest;
@@ -29,39 +27,29 @@ import java.util.EnumMap;
  */
 public class Router {
 
-    private static final Logger LOG = (Logger) LoggerFactory.getLogger(Router.class);
-
-    public static final String ROUTER_CONFIG_FILENAME = "router-config.json";
+    private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(Router.class);
 
     public String id;
     public Graph graph;
     public double[] timeouts = {5, 4, 2};
 
     /**
-     *  Separate logger for incoming requests. This should be handled with a Logback logger rather than something
-     *  simple like a PrintStream because requests come in multi-threaded.
+     *  Separate logger for incoming requests. This should be handled with a Logback logger
+     *  rather than something simple like a PrintStream because requests come in multi-threaded.
      */
     public Logger requestLogger = null;
 
-    /* TODO The fields for "components" are slowly disappearing... maybe at some point a router will be nothing but configuration values tied to a Graph. */
+    /* TODO The fields for "components" are slowly disappearing... maybe at some point a router
+        will be nothing but configuration values tied to a Graph. */
 
     // Inspector/debug services
     public TileRendererManager tileRendererManager;
-
-    // Analyst services
-    public TileCache tileCache;
-    public Renderer renderer;
-    public IsoChroneSPTRenderer isoChroneSPTRenderer;
-    public SampleGridRenderer sampleGridRenderer;
 
     // A RoutingRequest containing default parameters that will be cloned when handling each request
     public RoutingRequest defaultRoutingRequest;
 
     /** A graphical window that is used for visualizing search progress (debugging). */
     public GraphVisualizer graphVisualizer = null;
-
-    /** Storage for non-destructive alternatives analysis scenarios. */
-    public ScenarioStore scenarioStore = new ScenarioStore();
 
     public Router(String id, Graph graph) {
         this.id = id;
@@ -81,14 +69,6 @@ public class Router {
     public void startup(JsonNode config) {
 
         this.tileRendererManager = new TileRendererManager(this.graph);
-
-        // Analyst Modules FIXME make these optional based on JSON?
-        {
-            this.tileCache = new TileCache(this.graph);
-            this.renderer = new Renderer(this.tileCache);
-            this.sampleGridRenderer = new SampleGridRenderer(this.graph);
-            this.isoChroneSPTRenderer = new IsoChroneSPTRendererAccSampling(this.sampleGridRenderer);
-        }
 
         /* Create the default router parameters from the JSON router config. */
         JsonNode routingDefaultsNode = config.get("routingDefaults");

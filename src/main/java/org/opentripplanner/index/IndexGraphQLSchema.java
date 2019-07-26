@@ -1,9 +1,9 @@
 package org.opentripplanner.index;
 
 import com.google.transit.realtime.GtfsRealtime;
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Envelope;
-import com.vividsolutions.jts.geom.LineString;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Envelope;
+import org.locationtech.jts.geom.LineString;
 import graphql.Scalars;
 import graphql.language.StringValue;
 import graphql.relay.Relay;
@@ -269,9 +269,6 @@ public class IndexGraphQLSchema {
     private GraphQLInterfaceType nodeInterface = relay.nodeInterface(new TypeResolver() {
         @Override
         public GraphQLObjectType getType(Object o) {
-            if (o instanceof StopCluster) {
-                return (GraphQLObjectType) clusterType;
-            }
             if (o instanceof GraphIndex.StopAndDistance) {
                 return (GraphQLObjectType) stopAtDistanceType;
             }
@@ -833,7 +830,6 @@ public class IndexGraphQLSchema {
                 .build();
 
         fuzzyTripMatcher = new GtfsRealtimeFuzzyTripMatcher(index);
-        index.clusterStopsAsNeeded();
 
         translatedStringType = GraphQLObjectType.newObject()
                 .name("TranslatedString")
@@ -1167,7 +1163,7 @@ public class IndexGraphQLSchema {
                 .field(GraphQLFieldDefinition.newFieldDefinition()
                         .name("pattern")
                         .type(patternType)
-                        .dataFetcher(environment -> index.patternForId
+                        .dataFetcher(environment -> index.graph.tripPatternForId
                                 .get(((StopTimesInPattern) environment.getSource()).pattern.id))
                         .build())
                 .field(GraphQLFieldDefinition.newFieldDefinition()
@@ -2587,7 +2583,7 @@ public class IndexGraphQLSchema {
                     return index.routeForId.get(FeedScopedId.convertFromString(id.id));
                 }
                 if (id.type.equals(patternType.getName())) {
-                    return index.patternForId.get(id.id);
+                    return index.graph.tripPatternForId.get(id.id);
                 }
                 if (id.type.equals(agencyType.getName())) {
                     return index.getAgencyWithoutFeedId(id.id);

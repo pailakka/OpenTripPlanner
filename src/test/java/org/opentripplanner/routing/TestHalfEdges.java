@@ -1,9 +1,9 @@
 package org.opentripplanner.routing;
 
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.GeometryFactory;
-import com.vividsolutions.jts.geom.LineString;
-import com.vividsolutions.jts.linearref.LinearLocation;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.LineString;
+import org.locationtech.jts.linearref.LinearLocation;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -121,8 +121,6 @@ public class TestHalfEdges {
         station1.addMode(TraverseMode.RAIL);
         station2.addMode(TraverseMode.RAIL);
         
-        graph.rebuildVertexAndEdgeIndices();
-
         //Linkers aren't run otherwise in testNetworkLinker
         graph.hasStreets = true;
         graph.hasTransit = true;

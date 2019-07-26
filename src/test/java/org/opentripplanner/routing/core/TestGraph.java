@@ -17,8 +17,8 @@ import org.opentripplanner.routing.graph.Vertex;
 import org.opentripplanner.routing.vertextype.IntersectionVertex;
 import org.opentripplanner.routing.vertextype.StreetVertex;
 
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.LineString;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.LineString;
 
 public class TestGraph extends TestCase {
     public void testBasic() throws Exception {
@@ -119,24 +119,6 @@ public class TestGraph extends TestCase {
         allEdges.add(edge(b, c, 1.0));
         allEdges.add(edge(c, b, 1.0));
         allEdges.add(edge(c, a, 1.0));
-
-        // Before rebuilding the indices, they are empty.
-        for (Edge e : allEdges) {
-            assertNull(g.getEdgeById(e.getId()));
-        }
-
-        for (Vertex v : g.getVertices()) {
-            assertNull(g.getVertexById(v.getIndex()));
-        }
-
-        g.rebuildVertexAndEdgeIndices();
-        for (Edge e : allEdges) {
-            assertEquals(e, g.getEdgeById(e.getId()));
-        }
-
-        for (Vertex v : g.getVertices()) {
-            assertEquals(v, g.getVertexById(v.getIndex()));
-        }
     }
 
     /**

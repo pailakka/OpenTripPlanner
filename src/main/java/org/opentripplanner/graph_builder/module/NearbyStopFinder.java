@@ -2,12 +2,12 @@ package org.opentripplanner.graph_builder.module;
 
 import com.beust.jcommander.internal.Lists;
 import com.beust.jcommander.internal.Sets;
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.GeometryFactory;
-import com.vividsolutions.jts.geom.LineString;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.LineString;
 
 import org.opentripplanner.api.resource.CoordinateArrayListSequence;
-import org.opentripplanner.api.resource.SimpleIsochrone;
+import org.opentripplanner.common.MinMap;
 import org.opentripplanner.common.geometry.GeometryUtils;
 import org.opentripplanner.common.geometry.PackedCoordinateSequence;
 import org.opentripplanner.common.geometry.SphericalDistanceLibrary;
@@ -87,8 +87,7 @@ public class NearbyStopFinder {
      */
     public Set<StopAtDistance> findNearbyStopsConsideringPatterns (Vertex vertex) {
         /* Track the closest stop on each pattern & wheelchair accessibility combo passing nearby. */
-        SimpleIsochrone.MinMap<PatterWheelchairComposite, StopAtDistance> closestStopForPattern =
-                new SimpleIsochrone.MinMap<PatterWheelchairComposite, StopAtDistance>();
+        MinMap<PatterWheelchairComposite, StopAtDistance> closestStopForPattern = new MinMap<PatterWheelchairComposite, StopAtDistance>();
 
         /* Iterate over nearby stops via the street network or using straight-line distance, depending on the graph. */
         for (NearbyStopFinder.StopAtDistance stopAtDistance : findNearbyStops(vertex)) {
@@ -124,8 +123,12 @@ public class NearbyStopFinder {
     /**
      * Return all stops within a certain radius of the given vertex, using network distance along streets.
      * If the origin vertex is a TransitStop, the result will include it.
+     *
+     * @param originVertex the origin point of the street search
+     * @param reverseDirection if true the paths returned instead originate at the nearby stops and have the
+     *                         originVertex as the destination
      */
-    public List<StopAtDistance> findNearbyStopsViaStreets (Vertex originVertex) {
+    public List<StopAtDistance> findNearbyStopsViaStreets (Vertex originVertex, boolean reverseDirection) {
 
         RoutingRequest routingRequest = new RoutingRequest(TraverseMode.WALK);
         routingRequest.clampInitialWait = (0L);
@@ -181,6 +184,10 @@ public class NearbyStopFinder {
         wheelchairAccessibleRoutingRequest.cleanup();
         return stopsFound;
 
+    }
+
+    public List<StopAtDistance> findNearbyStopsViaStreets (Vertex originVertex) {
+        return findNearbyStopsViaStreets(originVertex, false);
     }
 
     /**
