@@ -1720,6 +1720,13 @@ public class IndexGraphQLSchema {
                         .type(Scalars.GraphQLString)
                         .dataFetcher(environment -> ((TripTimeShort) environment.getSource()).headsign)
                         .build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("stopSequence")
+                        .description("The sequence number of the stop")
+                        .type(Scalars.GraphQLInt)
+                        .dataFetcher(
+                                environment -> ((TripTimeShort) environment.getSource()).stopSequence)
+                        .build())
                 .build();
 
         tripType = GraphQLObjectType.newObject()
@@ -3566,6 +3573,12 @@ public class IndexGraphQLSchema {
                         .description("The stop related to the place.")
                         .type(stopType)
                         .dataFetcher(environment -> ((Place) environment.getSource()).vertexType.equals(VertexType.TRANSIT) ? index.stopForId.get(((Place) environment.getSource()).stopId) : null)
+                        .build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("stopSequence")
+                        .description("For transit stops, the sequence number of the stop.")
+                        .type(Scalars.GraphQLInt)
+                        .dataFetcher(environment -> ((Place) environment.getSource()).vertexType.equals(VertexType.TRANSIT) ? ((Place) environment.getSource()).stopSequence : null)
                         .build())
                 .field(GraphQLFieldDefinition.newFieldDefinition()
                         .name("bikeRentalStation")
