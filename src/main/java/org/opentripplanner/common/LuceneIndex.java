@@ -105,7 +105,7 @@ public class LuceneIndex {
     private void addStation(IndexWriter iwriter, String feedId, Stop station) throws IOException {
         Document doc = new Document();
         doc.add(new TextField("name", station.getName(), Field.Store.YES));
-        doc.add(new TextField("feed", feedId, Field.Store.YES));
+        doc.add(new StringField("feed", feedId, Field.Store.YES));
         doc.add(new DoubleField("lat", station.getLat(), Field.Store.YES));
         doc.add(new DoubleField("lon", station.getLon(), Field.Store.YES));
         doc.add(new StringField("id", GtfsLibrary.convertIdToString(station.getId()), Field.Store.YES));
@@ -116,7 +116,7 @@ public class LuceneIndex {
     private void addStop(IndexWriter iwriter, String feedId, Stop stop) throws IOException {
         Document doc = new Document();
         doc.add(new TextField("name", stop.getName(), Field.Store.YES));
-        doc.add(new TextField("feed", feedId, Field.Store.YES));
+        doc.add(new StringField("feed", feedId, Field.Store.YES));
         if (stop.getCode() != null) {
             doc.add(new StringField("code", stop.getCode(), Field.Store.YES));
         }
