@@ -2694,6 +2694,16 @@ public class IndexGraphQLSchema {
                                 .description("Query stops by this name")
                                 .type(Scalars.GraphQLString)
                                 .build())
+                        .argument(GraphQLArgument.newArgument()
+                                .name("maxResults")
+                                .description("Number of results to return when using `name` argument. Defaults to 10")
+                                .type(Scalars.GraphQLInt)
+                                .build())
+                        .argument(GraphQLArgument.newArgument()
+                                .name("feeds")
+                                .description("List of feeds from which stops are returned when using `name` argument. Defaults to all feeds")
+                                .type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString)))
+                                .build())
                         .dataFetcher(environment -> {
                             if ((environment.getArgument("ids") instanceof List)) {
                                 if (environment.getArguments().entrySet()
@@ -2712,7 +2722,11 @@ public class IndexGraphQLSchema {
                             if (environment.getArgument("name") == null) {
                                 stream = index.stopForId.values().stream();
                             } else {
-                                stream = index.getLuceneIndex().query(environment.getArgument("name"), true, true, false, false)
+
+                                int maxResults = environment.getArgument("maxResults") != null ? environment.getArgument("maxResults") : 10;
+                                List<String> feeds = environment.getArgument("feeds");
+
+                                stream = index.getLuceneIndex().query(environment.getArgument("name"), true, true, false, false, false, maxResults, feeds)
                                         .stream()
                                         .map(result -> index.stopForId.get(FeedScopedId.convertFromString(result.id)));
                             }
@@ -2957,8 +2971,8 @@ public class IndexGraphQLSchema {
                                 .build())
                         .argument(GraphQLArgument.newArgument()
                                 .name("feeds")
-                                .description("List of feeds from which stops are returned when using `name` argument. Defaults to all feeds")
-                                .type(new GraphQLList(Scalars.GraphQLString))
+                                .description("List of feeds from which stations are returned when using `name` argument. Defaults to all feeds")
+                                .type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString)))
                                 .build())
                         .dataFetcher(environment -> {
                             if ((environment.getArgument("ids") instanceof List)) {
@@ -2982,7 +2996,7 @@ public class IndexGraphQLSchema {
                                 int maxResults = environment.getArgument("maxResults") != null ? environment.getArgument("maxResults") : 10;
                                 List<String> feeds = environment.getArgument("feeds");
 
-                                stream = index.getLuceneIndex().query(environment.getArgument("name"), true, false, true, false, false, maxResults, null)
+                                stream = index.getLuceneIndex().query(environment.getArgument("name"), true, false, true, false, false, maxResults, feeds)
                                         .stream()
                                         .map(result -> index.stationForId.get(FeedScopedId.convertFromString(result.id)));
                             }
