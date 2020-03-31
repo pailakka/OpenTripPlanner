@@ -2690,6 +2690,11 @@ public class IndexGraphQLSchema {
                                 .type(new GraphQLList(Scalars.GraphQLString))
                                 .build())
                         .argument(GraphQLArgument.newArgument()
+                                .name("feeds")
+                                .description("List of feeds from which stops are returned. Defaults to all feeds")
+                                .type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString)))
+                                .build())
+                        .argument(GraphQLArgument.newArgument()
                                 .name("name")
                                 .description("Query stops by this name")
                                 .type(Scalars.GraphQLString)
@@ -2698,11 +2703,6 @@ public class IndexGraphQLSchema {
                                 .name("maxResults")
                                 .description("Number of results to return when using `name` argument. Defaults to 10")
                                 .type(Scalars.GraphQLInt)
-                                .build())
-                        .argument(GraphQLArgument.newArgument()
-                                .name("feeds")
-                                .description("List of feeds from which stops are returned when using `name` argument. Defaults to all feeds")
-                                .type(GraphQLList.list(GraphQLNonNull.nonNull(Scalars.GraphQLString)))
                                 .build())
                         .dataFetcher(environment -> {
                             if ((environment.getArgument("ids") instanceof List)) {
@@ -2720,9 +2720,13 @@ public class IndexGraphQLSchema {
                             }
                             Stream<Stop> stream;
                             if (environment.getArgument("name") == null) {
-                                stream = index.stopForId.values().stream();
+                                if (environment.getArgument("feeds") == null) {
+                                    stream = index.stopForId.values().stream();
+                                } else {
+                                    List<String> feedIds = environment.getArgument("feeds");
+                                    stream = index.stopForId.values().stream().filter(stop -> feedIds.contains(stop.getId().getAgencyId()));
+                                }
                             } else {
-
                                 int maxResults = environment.getArgument("maxResults") != null ? environment.getArgument("maxResults") : 10;
                                 List<String> feeds = environment.getArgument("feeds");
 
