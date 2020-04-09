@@ -1,0 +1,11 @@
+<xml>
+    <station>
+        <name>test station</name>
+        <freeBikes>1</freeBikes>
+        <freeEBikes>1</freeEBikes>
+        <freeLocks>1</freeLocks>
+        <freeELocks>2</freeELocks>
+        <latitude>62,887</latitude>
+        <longitude>27,687</longitude>
+    </station>
+</xml>
