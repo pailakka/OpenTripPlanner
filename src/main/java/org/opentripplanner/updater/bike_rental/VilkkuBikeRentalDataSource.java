@@ -22,20 +22,13 @@ public class VilkkuBikeRentalDataSource extends GenericXmlBikeRentalDataSource {
     }
     
     public BikeRentalStation makeStation(Map<String, String> attributes) {
-        
-        // some place entries appear to actually be checked-out bikes, not stations
-        if (attributes.get("bike") != null) {
-            return null;
-        }
-        
         BikeRentalStation station = new BikeRentalStation();
         station.networks = new HashSet<>(Collections.singleton(this.networkName));
         station.id = attributes.get("name");
         station.x = getCoordinate(attributes.get("longitude"));
         station.y = getCoordinate(attributes.get("latitude"));
         station.name = new NonLocalizedString(attributes.get("name"));
-        station.bikesAvailable  = getAvailableBikes(attributes);
-        station.spacesAvailable = getAvailableSpaces(attributes);
+        station.bikesAvailable  = Integer.parseInt(attributes.get("externallyLockedBikes"));
         station.state = "Station on";
         return station;
     }
@@ -47,18 +40,4 @@ public class VilkkuBikeRentalDataSource extends GenericXmlBikeRentalDataSource {
         }
         return Double.parseDouble(coordinate);
     }
-
-    private int getAvailableBikes(Map<String, String> attributes) {
-        int bikes = Integer.parseInt(attributes.get("freeBikes"));
-        int eBikes = Integer.parseInt(attributes.get("freeEBikes"));
-
-        return bikes + eBikes;
-    }
-
-    private int getAvailableSpaces(Map<String, String> attributes) {
-        int locks = Integer.parseInt(attributes.get("freeLocks"));
-        int eLocks = Integer.parseInt(attributes.get("freeELocks"));
-
-        return locks + eLocks;
-    }  
 }

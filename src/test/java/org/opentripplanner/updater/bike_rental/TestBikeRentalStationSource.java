@@ -247,7 +247,6 @@ public class TestBikeRentalStationSource extends TestCase {
         assertEquals(27.687, testStation.x);
         assertEquals(62.887, testStation.y);
         assertEquals(2, testStation.bikesAvailable);
-        assertEquals(3, testStation.spacesAvailable);
         assertEquals("Station on", testStation.state);
         assertEquals("[vilkku]", testStation.networks.toString());
 
